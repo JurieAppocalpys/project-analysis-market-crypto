@@ -3,131 +3,171 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Project Rava Crypto Analytics</title>
+    <title>RavaCrypto | Mobile Optimized</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #05070a; color: #cbd5e1; }
         .glass { background: rgba(17, 20, 27, 0.8); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.05); }
-        .modal { display: none; position: fixed; inset: 0; z-index: 50; align-items: center; justify-content: center; background: rgba(0,0,0,0.8); }
+        .modal { display: none; position: fixed; inset: 0; z-index: 50; align-items: center; justify-content: center; background: rgba(0,0,0,0.9); }
         .modal.active { display: flex; }
+        /* Hilangkan scrollbar tapi tetap bisa scroll */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
     </style>
 </head>
-<body class="p-4 md:p-10">
+<body class="p-4 md:p-10 pb-20">
 
-    <div class="max-w-6xl mx-auto">
-        <header class="mb-10 text-center md:text-left">
-            <h1 class="text-4xl font-black text-white tracking-tighter">ProjectRava<span class="text-blue-500"> CRYPTO</span></h1>
-            <p class="text-xs text-slate-500 mt-2 uppercase tracking-widest">Click any coin to view 1-Year Analytics</p>
+    <div class="max-w-4xl mx-auto">
+        <header class="mb-8 flex flex-col gap-4">
+            <div class="flex justify-between items-center">
+                <h1 class="text-2xl font-black text-white italic">RAVA<span class="text-blue-500">CRYPTO</span></h1>
+                <div class="px-3 py-1 bg-green-500/10 border border-green-500/20 rounded-full">
+                    <span class="text-[10px] text-green-500 font-bold animate-pulse">● LIVE</span>
+                </div>
+            </div>
+            
+            <div class="relative">
+                <input type="text" id="searchInput" onkeyup="filterCoins()" 
+                    placeholder="Cari Asset... (BTC, ETH, SOL)" 
+                    class="glass w-full pl-12 pr-4 py-4 rounded-2xl text-sm text-white focus:ring-2 focus:ring-blue-500/50 outline-none transition-all">
+                <span class="absolute left-4 top-4.5 opacity-50">🔍</span>
+            </div>
         </header>
 
-        <div class="glass rounded-3xl overflow-hidden shadow-2xl">
+        <div class="hidden md:block glass rounded-[2rem] overflow-hidden">
             <table class="w-full text-left text-sm">
-                <thead class="bg-black/50 text-[10px] uppercase text-slate-500 tracking-widest">
+                <thead class="bg-black/30 text-[10px] uppercase text-slate-500 tracking-widest">
                     <tr>
                         <th class="px-6 py-4">Asset</th>
                         <th class="px-6 py-4 text-right">Price (IDR)</th>
-                        <th class="px-6 py-4 text-right">24H Change</th>
+                        <th class="px-6 py-4 text-right">24H</th>
                     </tr>
                 </thead>
-                <tbody id="coin-body" class="divide-y divide-white/5">
-                    </tbody>
+                <tbody id="coin-body-desktop" class="divide-y divide-white/5"></tbody>
             </table>
         </div>
+
+        <div id="coin-body-mobile" class="grid grid-cols-1 gap-3 md:hidden">
+            </div>
     </div>
 
-    <div id="chartModal" class="modal p-4">
-        <div class="glass w-full max-w-4xl p-6 md:p-10 rounded-[2.5rem] relative">
-            <button onclick="closeModal()" class="absolute top-6 right-6 text-slate-400 hover:text-white text-2xl">&times;</button>
-            
-            <div id="modalHeader" class="mb-6">
-                </div>
+    <div id="chartModal" class="modal p-0 md:p-4">
+        <div class="glass w-full h-full md:h-auto md:max-w-4xl p-6 md:rounded-[2.5rem] flex flex-col">
+            <div class="flex justify-between items-start mb-6">
+                <div id="modalHeader"></div>
+                <button onclick="closeModal()" class="w-10 h-10 flex items-center justify-center bg-white/5 rounded-full text-white text-2xl">&times;</button>
+            </div>
 
-            <div class="h-[300 md:h-[400px] w-full">
+            <div class="flex-grow flex items-center">
                 <canvas id="coinChart"></canvas>
             </div>
+            
+            <button onclick="closeModal()" class="md:hidden mt-6 w-full py-4 bg-blue-600 text-white font-bold rounded-2xl">Kembali</button>
         </div>
     </div>
 
     <script>
         const API_BASE = 'https://api.coingecko.com/api/v3';
+        let coinData = [];
         let myChart = null;
 
-        async function fetchList() {
-            const res = await fetch(`${API_BASE}/coins/markets?vs_currency=idr&order=market_cap_desc&per_page=20&page=1`);
-            const data = await res.json();
-            renderTable(data);
+        async function init() {
+            try {
+                const res = await fetch(`${API_BASE}/coins/markets?vs_currency=idr&order=market_cap_desc&per_page=50&page=1`);
+                coinData = await res.json();
+                renderUI(coinData);
+            } catch (err) {
+                console.error("Limit API");
+            }
         }
 
-        function renderTable(data) {
-            const tbody = document.getElementById('coin-body');
-            tbody.innerHTML = data.map(coin => `
-                <tr onclick="openChart('${coin.id}', '${coin.name}')" class="hover:bg-white/5 transition-all cursor-pointer group">
-                    <td class="px-6 py-5 flex items-center gap-3">
-                        <img src="${coin.image}" class="w-6 h-6">
-                        <span class="font-bold text-white">${coin.name}</span>
+        function renderUI(data) {
+            const desktop = document.getElementById('coin-body-desktop');
+            const mobile = document.getElementById('coin-body-mobile');
+            
+            // DESKTOP TABLE
+            desktop.innerHTML = data.map(coin => `
+                <tr onclick="openChart('${coin.id}', '${coin.name}')" class="hover:bg-white/5 transition-all cursor-pointer">
+                    <td class="px-6 py-5 flex items-center gap-3 font-bold text-white tracking-tight italic uppercase">
+                        <img src="${coin.image}" class="w-6 h-6"> ${coin.name}
                     </td>
-                    <td class="px-6 py-5 text-right font-mono text-blue-400 font-bold">
-                        Rp ${coin.current_price.toLocaleString('id-ID')}
-                    </td>
-                    <td class="px-6 py-5 text-right ${coin.price_change_percentage_24h > 0 ? 'text-emerald-400' : 'text-rose-500'}">
+                    <td class="px-6 py-5 text-right font-bold text-blue-400 italic">Rp ${coin.current_price.toLocaleString('id-ID')}</td>
+                    <td class="px-6 py-5 text-right font-bold ${coin.price_change_percentage_24h > 0 ? 'text-green-500' : 'text-red-500'} italic">
                         ${coin.price_change_percentage_24h.toFixed(2)}%
                     </td>
                 </tr>
             `).join('');
+
+            // MOBILE CARDS
+            mobile.innerHTML = data.map(coin => `
+                <div onclick="openChart('${coin.id}', '${coin.name}')" class="glass p-5 rounded-2xl flex justify-between items-center active:scale-95 transition-transform">
+                    <div class="flex items-center gap-4">
+                        <img src="${coin.image}" class="w-10 h-10">
+                        <div>
+                            <h3 class="font-bold text-white text-sm uppercase italic">${coin.symbol}</h3>
+                            <p class="text-[10px] text-slate-500 uppercase">${coin.name}</p>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <p class="font-bold text-white text-sm">Rp ${coin.current_price.toLocaleString('id-ID')}</p>
+                        <p class="text-[10px] font-bold ${coin.price_change_percentage_24h > 0 ? 'text-green-500' : 'text-red-500'}">
+                            ${coin.price_change_percentage_24h > 0 ? '▲' : '▼'} ${Math.abs(coin.price_change_percentage_24h).toFixed(2)}%
+                        </p>
+                    </div>
+                </div>
+            `).join('');
         }
 
-        async function openChart(coinId, coinName) {
+        function filterCoins() {
+            const query = document.getElementById('searchInput').value.toLowerCase();
+            const filtered = coinData.filter(c => c.name.toLowerCase().includes(query) || c.symbol.toLowerCase().includes(query));
+            renderUI(filtered);
+        }
+
+        async function openChart(id, name) {
             document.getElementById('chartModal').classList.add('active');
-            document.getElementById('modalHeader').innerHTML = `<h2 class="text-3xl font-bold text-white">${coinName} <span class="text-sm text-slate-500 font-normal">Yearly Performance</span></h2>`;
-
+            document.getElementById('modalHeader').innerHTML = `<h2 class="text-2xl font-black text-white italic uppercase">${name}</h2><p class="text-[10px] text-slate-500 tracking-widest uppercase">Performance 1 Year</p>`;
+            
             try {
-                // Ambil data harga 365 hari terakhir
-                const res = await fetch(`${API_BASE}/coins/${coinId}/market_chart?vs_currency=idr&days=365&interval=daily`);
+                const res = await fetch(`${API_BASE}/coins/${id}/market_chart?vs_currency=idr&days=365&interval=daily`);
                 const data = await res.json();
-                
-                const labels = data.prices.map(p => new Date(p[0]).toLocaleDateString('id-ID', {month: 'short', year: '2-digit'}));
                 const prices = data.prices.map(p => p[1]);
+                const labels = data.prices.map(p => ""); // Kosongkan label x-axis agar bersih di HP
 
-                if (myChart) myChart.destroy(); // Hapus chart lama sebelum buat baru
-
+                if (myChart) myChart.destroy();
                 const ctx = document.getElementById('coinChart').getContext('2d');
                 myChart = new Chart(ctx, {
                     type: 'line',
                     data: {
                         labels: labels,
                         datasets: [{
-                            label: 'Price in IDR',
                             data: prices,
                             borderColor: '#3b82f6',
-                            borderWidth: 2,
+                            borderWidth: 3,
                             pointRadius: 0,
                             fill: true,
                             backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                            tension: 0.3
+                            tension: 0.4
                         }]
                     },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
-                        scales: {
-                            y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#64748b', font: { size: 10 } } },
-                            x: { grid: { display: false }, ticks: { color: '#64748b', font: { size: 10 }, maxRotation: 0 } }
-                        },
-                        plugins: { legend: { display: false } }
+                        plugins: { legend: { display: false } },
+                        scales: { 
+                            y: { grid: { display: false }, ticks: { display: false } },
+                            x: { grid: { display: false } }
+                        }
                     }
                 });
-            } catch (err) {
-                alert("Limit API tercapai, tunggu sebentar!");
-            }
+            } catch (e) { console.log("Limit"); }
         }
 
-        function closeModal() {
-            document.getElementById('chartModal').classList.remove('active');
-        }
+        function closeModal() { document.getElementById('chartModal').classList.remove('active'); }
 
-        fetchList();
+        init();
+        setInterval(init, 120000);
     </script>
 </body>
 </html>
