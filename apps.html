@@ -3,95 +3,131 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RavaCrypto Pro Fix</title>
+    <title>RavaCrypto Analytics + Charts</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #05070a; color: #cbd5e1; }
+        .glass { background: rgba(17, 20, 27, 0.8); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.05); }
+        .modal { display: none; position: fixed; inset: 0; z-index: 50; align-items: center; justify-content: center; background: rgba(0,0,0,0.8); }
+        .modal.active { display: flex; }
+    </style>
 </head>
-<body class="bg-[#0a0c10] text-gray-300 p-6">
+<body class="p-4 md:p-10">
 
-    <div class="max-w-5xl mx-auto">
-        <h1 class="text-2xl font-black text-white mb-6 uppercase">Rava Project<span class="text-blue-500">Crypto</span></h1>
-        
-        <input type="text" id="searchInput" onkeyup="filterCoins()" placeholder="Cari koin..." 
-            class="bg-[#11141b] border border-gray-800 rounded-lg px-4 py-2 w-full mb-6 focus:outline-none focus:border-blue-500 text-sm">
+    <div class="max-w-6xl mx-auto">
+        <header class="mb-10 text-center md:text-left">
+            <h1 class="text-4xl font-black text-white tracking-tighter">RAVA<span class="text-blue-500">CRYPTO</span></h1>
+            <p class="text-xs text-slate-500 mt-2 uppercase tracking-widest">Click any coin to view 1-Year Analytics</p>
+        </header>
 
-        <div class="bg-[#11141b] border border-gray-800 rounded-xl overflow-hidden">
-            <table class="w-full text-left text-xs">
-                <thead class="bg-black text-gray-500 uppercase">
+        <div class="glass rounded-3xl overflow-hidden shadow-2xl">
+            <table class="w-full text-left text-sm">
+                <thead class="bg-black/50 text-[10px] uppercase text-slate-500 tracking-widest">
                     <tr>
-                        <th class="px-6 py-4 cursor-pointer" onclick="sortTable(0)">#</th>
-                        <th class="px-6 py-4">Coin</th>
-                        <th class="px-6 py-4 text-right cursor-pointer" onclick="sortTable(2)">Price (IDR)</th>
-                        <th class="px-6 py-4 text-right">24h Change</th>
-                        <th class="px-6 py-4 text-right">Market Cap</th>
+                        <th class="px-6 py-4">Asset</th>
+                        <th class="px-6 py-4 text-right">Price (IDR)</th>
+                        <th class="px-6 py-4 text-right">24H Change</th>
                     </tr>
                 </thead>
-                <tbody id="coin-body">
+                <tbody id="coin-body" class="divide-y divide-white/5">
                     </tbody>
             </table>
         </div>
     </div>
 
-    <script>
-        const API_URL = 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=idr&order=market_cap_desc&per_page=50&page=1&sparkline=false';
-        let coinData = []; 
+    <div id="chartModal" class="modal p-4">
+        <div class="glass w-full max-w-4xl p-6 md:p-10 rounded-[2.5rem] relative">
+            <button onclick="closeModal()" class="absolute top-6 right-6 text-slate-400 hover:text-white text-2xl">&times;</button>
+            
+            <div id="modalHeader" class="mb-6">
+                </div>
 
-        // 1. Fungsi Ambil Data
-        async function fetchCryptoData() {
+            <div class="h-[300 md:h-[400px] w-full">
+                <canvas id="coinChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'https://api.coingecko.com/api/v3';
+        let myChart = null;
+
+        async function fetchList() {
+            const res = await fetch(`${API_BASE}/coins/markets?vs_currency=idr&order=market_cap_desc&per_page=20&page=1`);
+            const data = await res.json();
+            renderTable(data);
+        }
+
+        function renderTable(data) {
             const tbody = document.getElementById('coin-body');
-            // Tampilkan loading jika kosong
-            if (tbody.innerHTML === "") tbody.innerHTML = '<tr><td colspan="5" class="text-center py-10">Memuat Data...</td></tr>';
+            tbody.innerHTML = data.map(coin => `
+                <tr onclick="openChart('${coin.id}', '${coin.name}')" class="hover:bg-white/5 transition-all cursor-pointer group">
+                    <td class="px-6 py-5 flex items-center gap-3">
+                        <img src="${coin.image}" class="w-6 h-6">
+                        <span class="font-bold text-white">${coin.name}</span>
+                    </td>
+                    <td class="px-6 py-5 text-right font-mono text-blue-400 font-bold">
+                        Rp ${coin.current_price.toLocaleString('id-ID')}
+                    </td>
+                    <td class="px-6 py-5 text-right ${coin.price_change_percentage_24h > 0 ? 'text-emerald-400' : 'text-rose-500'}">
+                        ${coin.price_change_percentage_24h.toFixed(2)}%
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function openChart(coinId, coinName) {
+            document.getElementById('chartModal').classList.add('active');
+            document.getElementById('modalHeader').innerHTML = `<h2 class="text-3xl font-bold text-white">${coinName} <span class="text-sm text-slate-500 font-normal">Yearly Performance</span></h2>`;
 
             try {
-                const response = await fetch(API_URL);
-                if (!response.ok) throw new Error("Limit");
+                // Ambil data harga 365 hari terakhir
+                const res = await fetch(`${API_BASE}/coins/${coinId}/market_chart?vs_currency=idr&days=365&interval=daily`);
+                const data = await res.json();
                 
-                coinData = await response.json();
-                renderTable(coinData);
-                console.log("Data Berhasil Dimuat");
-            } catch (error) {
-                console.error("API Error:", error);
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center py-10 text-red-500">API Limit! Tunggu 1 menit lalu refresh.</td></tr>';
+                const labels = data.prices.map(p => new Date(p[0]).toLocaleDateString('id-ID', {month: 'short', year: '2-digit'}));
+                const prices = data.prices.map(p => p[1]);
+
+                if (myChart) myChart.destroy(); // Hapus chart lama sebelum buat baru
+
+                const ctx = document.getElementById('coinChart').getContext('2d');
+                myChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Price in IDR',
+                            data: prices,
+                            borderColor: '#3b82f6',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            fill: true,
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            tension: 0.3
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#64748b', font: { size: 10 } } },
+                            x: { grid: { display: false }, ticks: { color: '#64748b', font: { size: 10 }, maxRotation: 0 } }
+                        },
+                        plugins: { legend: { display: false } }
+                    }
+                });
+            } catch (err) {
+                alert("Limit API tercapai, tunggu sebentar!");
             }
         }
 
-        // 2. Fungsi Render Tabel
-        function renderTable(data) {
-            const tbody = document.getElementById('coin-body');
-            tbody.innerHTML = data.map((coin, index) => {
-                const isPos = coin.price_change_percentage_24h > 0;
-                return `
-                    <tr class="border-b border-gray-800 hover:bg-gray-800/30 transition">
-                        <td class="px-6 py-4 text-gray-500">${coin.market_cap_rank}</td>
-                        <td class="px-6 py-4 flex items-center gap-2">
-                            <img src="${coin.image}" class="w-4 h-4">
-                            <span class="font-bold text-white">${coin.name}</span>
-                        </td>
-                        <td class="px-6 py-4 text-right font-mono text-blue-400">
-                            Rp ${coin.current_price.toLocaleString('id-ID')}
-                        </td>
-                        <td class="px-6 py-4 text-right ${isPos ? 'text-green-500' : 'text-red-500'}">
-                            ${isPos ? '▲' : '▼'} ${Math.abs(coin.price_change_percentage_24h).toFixed(2)}%
-                        </td>
-                        <td class="px-6 py-4 text-right text-gray-500">
-                            Rp ${Math.floor(coin.market_cap / 1000000).toLocaleString('id-ID')}jt
-                        </td>
-                    </tr>
-                `;
-            }).join('');
+        function closeModal() {
+            document.getElementById('chartModal').classList.remove('active');
         }
 
-        // 3. Fungsi Search
-        function filterCoins() {
-            const term = document.getElementById('searchInput').value.toLowerCase();
-            const filtered = coinData.filter(c => c.name.toLowerCase().includes(term) || c.symbol.toLowerCase().includes(term));
-            renderTable(filtered);
-        }
-
-        // 4. JALANKAN PERTAMA KALI
-        fetchCryptoData();
-        
-        // Refresh otomatis tiap 2 menit (biar nggak gampang kena limit)
-        setInterval(fetchCryptoData, 120000);
+        fetchList();
     </script>
 </body>
 </html>
