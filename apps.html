@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RavaCrypto Pro Fix</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-[#0a0c10] text-gray-300 p-6">
+
+    <div class="max-w-5xl mx-auto">
+        <h1 class="text-2xl font-black text-white mb-6 uppercase">Rava Project<span class="text-blue-500">Crypto</span></h1>
+        
+        <input type="text" id="searchInput" onkeyup="filterCoins()" placeholder="Cari koin..." 
+            class="bg-[#11141b] border border-gray-800 rounded-lg px-4 py-2 w-full mb-6 focus:outline-none focus:border-blue-500 text-sm">
+
+        <div class="bg-[#11141b] border border-gray-800 rounded-xl overflow-hidden">
+            <table class="w-full text-left text-xs">
+                <thead class="bg-black text-gray-500 uppercase">
+                    <tr>
+                        <th class="px-6 py-4 cursor-pointer" onclick="sortTable(0)">#</th>
+                        <th class="px-6 py-4">Coin</th>
+                        <th class="px-6 py-4 text-right cursor-pointer" onclick="sortTable(2)">Price (IDR)</th>
+                        <th class="px-6 py-4 text-right">24h Change</th>
+                        <th class="px-6 py-4 text-right">Market Cap</th>
+                    </tr>
+                </thead>
+                <tbody id="coin-body">
+                    </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=idr&order=market_cap_desc&per_page=50&page=1&sparkline=false';
+        let coinData = []; 
+
+        // 1. Fungsi Ambil Data
+        async function fetchCryptoData() {
+            const tbody = document.getElementById('coin-body');
+            // Tampilkan loading jika kosong
+            if (tbody.innerHTML === "") tbody.innerHTML = '<tr><td colspan="5" class="text-center py-10">Memuat Data...</td></tr>';
+
+            try {
+                const response = await fetch(API_URL);
+                if (!response.ok) throw new Error("Limit");
+                
+                coinData = await response.json();
+                renderTable(coinData);
+                console.log("Data Berhasil Dimuat");
+            } catch (error) {
+                console.error("API Error:", error);
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center py-10 text-red-500">API Limit! Tunggu 1 menit lalu refresh.</td></tr>';
+            }
+        }
+
+        // 2. Fungsi Render Tabel
+        function renderTable(data) {
+            const tbody = document.getElementById('coin-body');
+            tbody.innerHTML = data.map((coin, index) => {
+                const isPos = coin.price_change_percentage_24h > 0;
+                return `
+                    <tr class="border-b border-gray-800 hover:bg-gray-800/30 transition">
+                        <td class="px-6 py-4 text-gray-500">${coin.market_cap_rank}</td>
+                        <td class="px-6 py-4 flex items-center gap-2">
+                            <img src="${coin.image}" class="w-4 h-4">
+                            <span class="font-bold text-white">${coin.name}</span>
+                        </td>
+                        <td class="px-6 py-4 text-right font-mono text-blue-400">
+                            Rp ${coin.current_price.toLocaleString('id-ID')}
+                        </td>
+                        <td class="px-6 py-4 text-right ${isPos ? 'text-green-500' : 'text-red-500'}">
+                            ${isPos ? '▲' : '▼'} ${Math.abs(coin.price_change_percentage_24h).toFixed(2)}%
+                        </td>
+                        <td class="px-6 py-4 text-right text-gray-500">
+                            Rp ${Math.floor(coin.market_cap / 1000000).toLocaleString('id-ID')}jt
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // 3. Fungsi Search
+        function filterCoins() {
+            const term = document.getElementById('searchInput').value.toLowerCase();
+            const filtered = coinData.filter(c => c.name.toLowerCase().includes(term) || c.symbol.toLowerCase().includes(term));
+            renderTable(filtered);
+        }
+
+        // 4. JALANKAN PERTAMA KALI
+        fetchCryptoData();
+        
+        // Refresh otomatis tiap 2 menit (biar nggak gampang kena limit)
+        setInterval(fetchCryptoData, 120000);
+    </script>
+</body>
+</html>
